@@ -549,6 +549,7 @@ def str_code(df):
 
 
 if __name__ == '__main__':
+    path = 'c:/g/lfp/result/'
 
     today = datetime.datetime.today()
     today = str(today)[:10]
@@ -569,7 +570,7 @@ if __name__ == '__main__':
     fund_id = fund_id[fund_id['end_date'] == 1]
     
     # 叠加二级分类
-    fund_type2 =pd.read_csv('G:/lfp/result/fund_type.csv',encoding='gbk',index_col=0)
+    fund_type2 =pd.read_csv(path + 'fund_type.csv',encoding='gbk',index_col=0)
     fund_type2 = fund_type2.rename(columns={'code':'main_code'})
     fund_type2.main_code = fund_type2.main_code.apply(lambda s: str(s).zfill(6))
     fund_id = fund_id.merge(fund_type2)
@@ -584,7 +585,7 @@ if __name__ == '__main__':
         except:
             pass
     df = pd.concat(ret)
-    df.to_csv('G:/lfp/result/fund_value.csv')
+    df.to_csv(path + 'fund_value.csv')
     # df = pd.read_csv('data/fund_value.csv', encoding='gbk',index_col=0)
 
     benchmark = stock_price('000300.XSHG', '1d', fund_stime, today)
@@ -793,7 +794,7 @@ if __name__ == '__main__':
     # fund_rank_r.code = fund_rank_r.code.apply(lambda s: str(s).zfill(6))
     fund_rank_r = pd.merge(fund_name, fund_rank_r, on='code', how='inner')
     # fund_rank_r = pd.merge(fund_id[['main_code','name','label']], fund_rank_r, left_on='main_code',right_on='code', how='inner')
-    fund_rank_r.to_csv('G:/lfp/result/fund_rank_by_topsis_v5_' + today +'.csv', encoding='gbk')
+    fund_rank_r.to_csv(path + 'fund_rank_by_topsis_v5_' + today +'.csv', encoding='gbk')
 # =============================================================================
 # 基金精选池
 # =============================================================================
@@ -895,4 +896,4 @@ if __name__ == '__main__':
         ret_second.append(tmp)
     df_second = pd.concat(ret_second)
     
-    df_second.to_excel('G:/lfp/result/good_funds_' + today + '.xls',encoding='gbk')
+    df_second.to_excel(path + 'good_funds_' + today + '.xls',encoding='gbk')
