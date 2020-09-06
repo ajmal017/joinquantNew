@@ -494,6 +494,7 @@ def no_extreme(df, col):
 
 
 if __name__ == '__main__':
+    path = 'c:/g/lfp/result/'
     # annror_36_402003 = 0.05  # 债券型基金近3年年化收益阈值
     # annror_36 = 0.1  # 股票型和混合型基金近3年年化收益阈值
     # maxretrace_60 = 0.45  # 近5年最大回撤阈值
@@ -745,4 +746,4 @@ if __name__ == '__main__':
     # 输出结果
     fund_rank_r = pd.concat(ret)
     fund_rank_r = pd.merge(fund_name, fund_rank_r, on='code', how='inner')
-    fund_rank_r.to_csv('G:/lfp/result/fund_rank_position_chg_48' + today + '.csv', encoding='gbk')
+    fund_rank_r.to_csv(path + 'fund_rank_position_chg_48' + today + '.csv', encoding='gbk')

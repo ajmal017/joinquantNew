@@ -2,7 +2,7 @@
 # @Time    : 2020/6/30 10:15
 # @Author  : zhangfang
 import pandas as pd
-import html5lib
+# import html5lib
 from trading_future.future_singleton import Future
 from backtest_func import yearsharpRatio, maxRetrace, annROR, annROR_signal
 import matplotlib.pyplot as plt
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     method = 'sum'  # 单利：sum；复利：muti
 
     fee = np.float(0.00015)
-    fold_ini_path = 'e://Strategy//MT4//'
+    fold_ini_path = 'c://g//缠论//回测报告//'
     # fold_ini_path = 'G://缠论//回测报告//'
     porfolio = Future()
     mode = '蓝线笔_蓝线反转确认_蓝线反转平仓_200627'

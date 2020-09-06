@@ -446,7 +446,7 @@ if __name__ == '__main__':
     receiver = ['xiahutao@163.com']
 
     today = datetime.date.today()
-    fold = 'E:/fof/cgo/'
+    fold = 'c:/e/fof/cgo/'
     index_code_lst = ['399006.XSHE', '000300.XSHG', '000905.XSHG', '000016.XSHG']
     name_lst = ['cyb', 'hs', 'zz', 'sz']
     para_dict = {'cyb': [(0.7, 8, 18), (0.9, 9, 18), (0.85, 11, 30), (0.85, 20, 38), (0.95, 15, 18)],

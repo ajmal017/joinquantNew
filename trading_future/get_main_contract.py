@@ -37,18 +37,7 @@ if __name__ == '__main__':
     df = porfolio.get_main_symbol(product=symbol_lst, date=EndDate)
     df = pd.DataFrame(df).T
     print(df)
-    df.to_csv('G:/trading/main_contract.csv')
-
-    # code = 'Y8888.XDCE'
-    # sday = '2010-01-01'
-    # eday = '2020-06-02'
-    # temp = get_price(code, start_date=sday, end_date=eday, frequency='1m', fields=None, skip_paused=True, fq='pre',
-    #                  count=None)[['open', 'high', 'low', 'close', 'volume']]
-    # print(temp)
-    # # temp['date_time'] = temp.index
-    # # temp['date_time'] = temp['date_time'].apply(lambda x: str(x) + str(' 00:00'))
-    # # temp = temp.set_index(['date_time'])
-    # temp.to_csv('e:/data/Y1m.txt')
+    # df.to_csv('c:/g/trading/main_contract.csv')
 
 
 
