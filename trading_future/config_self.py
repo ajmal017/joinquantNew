@@ -6,7 +6,7 @@
 MONGDB_IP = '223.93.165.111'  # 居正公司服务器
 MONGDB_USER = 'zhangfang'
 MONGDB_PW = 'jz148923'
-MONGDB_IP_TICK = '192.168.2.11'  # 居正公司服务器
+MONGDB_IP_TICK = '223.93.165.111'  # 居正公司服务器
 MONGDB_USER_TICK = 'juzheng'
 MONGDB_PW_TICK = 'jz2018*'
 

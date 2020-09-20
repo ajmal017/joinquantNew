@@ -35,6 +35,11 @@ if __name__ == '__main__':
     porfolio = Future()
     print(EndDate)
     df = porfolio.get_main_symbol(product=symbol_lst, date=EndDate)
+    print(df)
+    df = {}
+    for symbol in symbol_lst:
+        print(symbol)
+        df[symbol] = [get_dominant_future(symbol, date)]
     df = pd.DataFrame(df).T
     print(df)
     # df.to_csv('c:/g/trading/main_contract.csv')

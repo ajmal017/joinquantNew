@@ -3,7 +3,7 @@
 配置模块
 """
 
-MONGDB_IP = '192.168.2.201'  # 居正公司服务器
+MONGDB_IP = '223.93.165.111'  # 居正公司服务器
 MONGDB_USER = 'zhangfang'
 MONGDB_PW = 'jz148923'
 MONGDB_IP_TICK = '192.168.2.11'  # 居正公司服务器

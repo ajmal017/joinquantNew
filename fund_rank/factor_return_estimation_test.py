@@ -10,9 +10,6 @@ import numpy as np
 import pandas as pd
 from MySQLdb import connect, cursors
 import scipy.optimize as sco
-
-
-
 import configparser
 import os
 import socket

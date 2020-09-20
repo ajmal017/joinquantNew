@@ -1,10 +1,14 @@
 # coding=utf-8
-from trading_future.config_self import *
+from trading_future.config_self1 import *
 import pandas as pd
 import numpy as np
 import re
 import datetime
 import pymongo
+from jqdatasdk import *
+from configDB import *
+auth(JOINQUANT_USER, JOINQUANT_PW)
+print(MONGDB_USER,MONGDB_PW,MONGDB_IP)
 
 
 class Future:
@@ -145,6 +149,7 @@ class Future:
         获取mongo里的product数据
         :return:
         """
+        print(MONGDB_USER,MONGDB_PW,MONGDB_IP)
         with pymongo.MongoClient(f'mongodb://{MONGDB_USER}:{MONGDB_PW}@{MONGDB_IP}:27017/') as m_cl:
             col = m_cl['MARKET']['product']
             df_product = pd.DataFrame(col.find({'ProductID': {'$regex': '^[a-zA-Z]{1,2}$'}}))
@@ -221,21 +226,13 @@ class Future:
         if product:
             product = product if isinstance(product, list) else [product]
         date = pd.to_datetime(date) if date else pd.to_datetime(datetime.date.today())
-        df_list = list()
-        for mark, df in self.main_contract_msg.items():
-            try:
-                df = pd.DataFrame(df.loc[date]).T
-                df.index = [mark]
-                df_list.append(df)
-            except:
-                df = pd.DataFrame(index=[mark], columns=product)
-                df_list.append(df)
 
-        df_daily = pd.concat(df_list)
-        if product:
-            df_daily = df_daily.loc[:, product]
-        df_dict = df_daily.to_dict()
-        return df_dict
+        df = {}
+        for symbol in product:
+            print(symbol)
+            df[symbol] = get_dominant_future(symbol, date)[:-5]
+
+        return df
 
     def __get_trading_sessions(self):
         """
