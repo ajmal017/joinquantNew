@@ -1,0 +1,22 @@
+digraph program {
+node [style=filled]
+0 [label="delta", fillcolor="#136ed4"] ;
+1 [label="div", fillcolor="#136ed4"] ;
+2 [label="stddev", fillcolor="#136ed4"] ;
+3 [label="stddev", fillcolor="#136ed4"] ;
+4 [label="ts_max", fillcolor="#136ed4"] ;
+5 [label="avg", fillcolor="#60a6f6"] ;
+4 -> 5 ;
+3 -> 4 ;
+2 -> 3 ;
+6 [label="stddev", fillcolor="#136ed4"] ;
+7 [label="ts_rank", fillcolor="#136ed4"] ;
+8 [label="ts_argmin", fillcolor="#136ed4"] ;
+9 [label="close", fillcolor="#60a6f6"] ;
+8 -> 9 ;
+7 -> 8 ;
+6 -> 7 ;
+1 -> 6 ;
+1 -> 2 ;
+0 -> 1 ;
+}

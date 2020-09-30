@@ -1,5 +1,5 @@
 # coding=utf-8
-from trading_future.config_self1 import *
+from trading_future.config_self import *
 import pandas as pd
 import numpy as np
 import re
@@ -8,7 +8,6 @@ import pymongo
 from jqdatasdk import *
 from configDB import *
 auth(JOINQUANT_USER, JOINQUANT_PW)
-print(MONGDB_USER,MONGDB_PW,MONGDB_IP)
 
 
 class Future:
