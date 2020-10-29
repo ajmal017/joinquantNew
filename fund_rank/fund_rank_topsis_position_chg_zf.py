@@ -745,4 +745,4 @@ if __name__ == '__main__':
     # 输出结果 
     fund_rank_r = pd.concat(ret)
     fund_rank_r = pd.merge(fund_name, fund_rank_r, on='code', how='inner')
-    fund_rank_r.to_csv('G:/lfp/result/fund_rank_position_chg_zf' + today + '.csv', encoding='gbk')
+    fund_rank_r.to_csv('c:/g/lfp/result/fund_rank_position_chg_zf' + today + '.csv', encoding='gbk')

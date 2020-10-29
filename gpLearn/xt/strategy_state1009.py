@@ -341,10 +341,10 @@ def get_strategy_signal(strategy_name_lst, date):
 
 
 if __name__ == "__main__":
-    # strategy_name_lst = ['aiznqd', 'znlbtgj', 'sdxf', 'tlaefyh']
-    # strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家', '时代先锋', '淘利阿尔法1号']
-    strategy_name_lst = ['aiznqd', 'znlbtgj']
-    strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家']
+    strategy_name_lst = ['aiznqd', 'znlbtgj', 'sdxf', 'tlaefyh']
+    strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家', '时代先锋', '淘利阿尔法1号']
+    # strategy_name_lst = ['aiznqd', 'znlbtgj']
+    # strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家']
     account_init = 10000000
     strategy_init = 500000
     s_date = '2020-09-30'

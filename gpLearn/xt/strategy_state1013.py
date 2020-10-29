@@ -24,13 +24,11 @@ from configDB import *
 import os
 from logger_local import logger_self
 from gpLearn.xt.word_pdf import FormatConvert, SendMessage
-import numpy as np
 plt.style.use('ggplot')
 #table_style = 'Light List Accent 1'
 table_style = "Table Grid"
 auth(JOINQUANT_USER, JOINQUANT_PW)
 
-# fold_path = 'c:/e/simulate/'
 fold_path = 'c:/e/data/qe/simulate/'
 get_log = logger_self(set_level='info', file_path=fold_path + 'log' + '/').InItlogger()
 strategy_map = {
@@ -39,17 +37,7 @@ strategy_map = {
     'AI智能驱动': 'pt608bd9c8cedf11e985790a580a81060a',
     '时代先锋': 'pt83dc374ccedf11e981d70a580a81060a',
 }
-def stock_price_index(sec, period, sday, eday):
-    """
-    输入 股票代码，开始日期，截至日期
-    输出 个股的后复权的开高低收价格
-    """
-    temp = get_price(sec, start_date=sday, end_date=eday, frequency=period,
-                     skip_paused=False, fq='pre', count=None).reset_index() \
-        .rename(columns={'index': 'trade_date'})\
-        .assign(trade_date=lambda df: df.trade_date.apply(lambda x: str(x)[:10])).dropna()
-    temp['stock_code'] = sec
-    return temp
+
 
 def stock_price(sec, sday, eday):
     """
@@ -415,60 +403,6 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     trade_state_all['bs'] = trade_state_all['操作'].apply(lambda x: trans_to_bs(x))
     trade_state_all['持仓'] = trade_state_all['成交数量'] * trade_state_all['bs']
     trade_state_all['成交金额'] = -trade_state_all['成交金额'] * trade_state_all['bs']
-    win_r_lst = []
-
-    for strategy_name in strategy_name_lst:
-        temp = trade_state_all[trade_state_all['策略名称'] == strategy_name]
-        print(temp)
-        ret_lst = []
-        if len(temp) == 0:
-            win_r_lst.append([strategy_name, 1, 1])
-            continue
-        win_time = 0
-        trad_time = 0
-        cost_lst = []
-        buy_code_lst = []
-        for date, group in temp.groupby(['日期']):
-            if len(buy_code_lst) > 0:
-                for i in range(len(buy_code_lst)):
-                    cost_i = cost_lst[i]
-                    code = buy_code_lst[i]
-                    sell_df = group[(group['bs'] == -1) & (group['证券代码'] == code)]
-                    if len(sell_df) == 0:
-                        continue
-                    sell_value = abs(sell_df['成交金额'].sum()) - abs(sell_df['手续费'].sum())
-                    ret = sell_value - cost_i
-                    ret_lst.append(ret)
-                    if ret > 0:
-                        win_time += 1
-                        trad_time += 1
-                    else:
-                        trad_time += 1
-            cost_lst = []
-            buy_code_lst = []
-            buy_df = group[group['bs'] == 1]
-            if len(buy_df) == 0:
-                buy_code_lst = []
-                continue
-            for buy_code, buy_group in buy_df.groupby(['证券代码']):
-                buy_code_lst.append(buy_code)
-                cost = abs(buy_group['成交金额'].sum()) + abs(buy_group['手续费'].sum())
-                cost_lst.append(cost)
-        win_r = 1
-        odd = 1
-        if trad_time > 0:
-            win_r = win_time / trad_time
-            ret_pos = [i for i in ret_lst if i > 0]
-            ret_nev = [i for i in ret_lst if i < 0]
-            if len(ret_nev) > 0:
-                pos_ave = 0
-                if len(ret_pos) > 0:
-                    pos_ave = abs(np.mean(ret_pos))
-                odd = pos_ave / abs(np.mean(ret_nev))
-        win_r_lst.append([strategy_name, win_r, odd])
-    win_df = pd.DataFrame(win_r_lst, columns=['策略名称', '胜率', '盈亏比'])
-
-
     trade_state_today = trade_state_all[trade_state_all['日期'] == calen[-1]]
     hold_df_firstday = trade_state_all[(trade_state_all['日期'] == calen[0]) & (trade_state_all['bs'] == 1)]
     hold_df_back = trade_state_all[(trade_state_all['日期'] > calen[0])]
@@ -568,14 +502,13 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     strategy_state.append(
         ['组合', calen[0], calen[-1], today_net, total_ret, annR, sharp, max_retrace, today_profit, today_ret])
     strategy_state_df = pd.DataFrame(strategy_state, columns=['策略名称', '开始日期', '结束日期', '净值', '累计收益', '年化收益', '夏普', '最大回撤', '当日盈亏', '当日收益'])
-    strategy_state_df = strategy_state_df.merge(win_df, on=['策略名称'])
 
     asset_df = pd.DataFrame(strategy_net_all_dict)
     asset_df['date'] = calen
     asset_df['date'] = pd.to_datetime(asset_df['date'])
-    asset_df['沪深300'] = index_hq_net_lst
 
     title_str = '策略净值曲线'
+
     asset_df.set_index(['date']).plot()
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.title(title_str)
@@ -598,24 +531,20 @@ if __name__ == "__main__":
     strategy_name_lst = ['aiznqd', 'znlbtgj', 'sdxf', 'tlaefyh']
     strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家', '时代先锋', '淘利阿尔法1号']
     strategy_dict = {'AI智能驱动': 'aiznqd', '智能罗伯特管家': 'znlbtgj', '时代先锋': 'sdxf', '淘利阿尔法1号': 'tlaefyh'}
-    index_code = '000300.XSHG'
 
     # strategy_name_lst = ['aiznqd', 'znlbtgj']
     # strategy_china_name_lst = ['AI智能驱动', '智能罗伯特管家']
     account_init = 10208522
     strategy_init = 500000
     s_date = '2020-10-14'
-
+    # today = pd.to_datetime('2020-10-15')
     today = datetime.date.today()
-    # today = pd.to_datetime('2020-10-28')
 
     calen = get_trade_days(s_date, today)
     calen = [i.strftime('%Y%m%d') for i in list(calen)]
     print(calen)
     calen, next_tradeday, EndDate, StartDate, hq_last_date = get_date(calen, today)
     get_log.info('EndDate:%s, StartDate:%s' % (EndDate, StartDate))
-    index_hq = stock_price_index(index_code, '1d', pd.to_datetime(StartDate), pd.to_datetime(EndDate))
-    index_hq_net_lst = [i/index_hq['close'].tolist()[0] for i in index_hq['close'].tolist()]
     document = Document()
     # 添加标题,并修改字体样式
     head = document.add_heading(0)
@@ -681,12 +610,10 @@ if __name__ == "__main__":
         strategy_state_df['当日盈亏'] = strategy_state_df['当日盈亏'].apply(lambda x: '%.0f' % x)
         # strategy_state_df['净值'] = strategy_state_df['净值'].apply(lambda x: '%.2f' % x)
         strategy_state_df['夏普'] = strategy_state_df['夏普'].apply(lambda x: '%.2f' % x)
-        strategy_state_df['年化收益'] = strategy_state_df['年化收益'].apply(lambda x: '%.2f%%' % (x*100))
-        strategy_state_df['累计收益'] = strategy_state_df['累计收益'].apply(lambda x: '%.2f%%' % (x*100))
-        strategy_state_df['最大回撤'] = strategy_state_df['最大回撤'].apply(lambda x: '%.2f%%' % (x*100))
-        strategy_state_df['盈亏比'] = strategy_state_df['盈亏比'].apply(lambda x: '%.2f' % x)
-        strategy_state_df['胜率'] = strategy_state_df['胜率'].apply(lambda x: '%.2f%%' % (x * 100))
-        strategy_state_df['当日收益'] = strategy_state_df['当日收益'].apply(lambda x: '%.2f%%' % (x*100))
+        strategy_state_df['年化收益'] = strategy_state_df['年化收益'].apply(lambda x: '%.2f%%' % (x))
+        strategy_state_df['累计收益'] = strategy_state_df['累计收益'].apply(lambda x: '%.2f%%' % (x))
+        strategy_state_df['最大回撤'] = strategy_state_df['最大回撤'].apply(lambda x: '%.2f%%' % (x))
+        strategy_state_df['当日收益'] = strategy_state_df['当日收益'].apply(lambda x: '%.2f%%' % (x))
     save_df_to_doc(document, strategy_state_df.drop(['净值'], axis=1), '策略统计')
     # strategy_today_trade, strategy_state = get_strategy_account(fold_path_strategy,
     #     file_lst_strategy, EndDate, strategy_name_lst, calen, strategy_init)
@@ -701,6 +628,7 @@ if __name__ == "__main__":
     # 当日成交
     trade_detail = get_trade_detail(fold_path_trade, file_lst_trade, EndDate)
     today_trade_state = get_trade_state(trade_detail)
+
 
     if len(trade_detail) > 0:
         trade_detail['成交数量'] = trade_detail['成交数量'].apply(lambda x: '%.0f' % x)
@@ -721,15 +649,15 @@ if __name__ == "__main__":
 
     FormatConvert.word_to_pdf(f'{fold_path}/report/模拟盘交易报告{EndDate}.docx',
                               f'{fold_path}/report/模拟盘交易报告{EndDate}.pdf')
-    subject = f'模拟盘交易报告{EndDate}'
+    subject = f'模拟交易报告{EndDate}'
 
-    password = '9eFzgacCkDMUpPP6'
-    # password = 'Zf1991'
-    sender = 'aiquant@ai-quants.com'
+    #password = 'GQYJMWRAYELIJGWK'
+    password = 'Zf1991'
+    sender = 'zhangfang@ai-quants.com'
     # 收件人为多个收件人
     receiver = ["dawn0zhou@163.com", "zhangfang@ai-quants.com", "wjm@ai-quants.com",
                 "zj@ai-quants.com", 'hzn@ai-quants.com']
-    # # receiver = ['zhangfang@ai-quants.com']
+    # receiver = ['zhangfang@ai-quants.com']
     send = SendMessage(sender, password)
     file_path = f'{fold_path}/report/模拟盘交易报告{EndDate}.pdf'
     # send.send_email(subject, subject, receiver, file_path)
