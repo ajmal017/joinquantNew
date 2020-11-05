@@ -474,9 +474,14 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     hold_df_back = trade_state_all[(trade_state_all['日期'] > calen[0])]
     hold_df = pd.concat([hold_df_firstday, hold_df_back])[['策略名称', '证券代码', '证券名称', '持仓']]\
         .groupby(['策略名称', '证券代码', '证券名称']).sum().reset_index(drop=False)
+
     print('==============hold_df')
     print(hold_df)
     hold_today = hold_df[hold_df['持仓'] > 0]
+    hold_today = trade_state_all[['策略名称', '证券代码', '证券名称', '日期', '成交均价', 'bs']]\
+        .merge(hold_today, on=['策略名称', '证券代码', '证券名称'])
+    hold_today = hold_today[(hold_today['日期'] == hold_today['日期'].max()) & (hold_today['bs'] == 1)]
+
     account_hold_ = account_hold[['证券代码', '持股', '最新价']]
     account_hold_lst = account_hold['证券代码'].tolist()
     account_hold_ = account_hold_.set_index(['证券代码'])
@@ -492,9 +497,10 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
                 continue
             hold = row_['持仓']
             price = account_hold_.loc[code]['最新价']
+            cost__ = row_['成交均价']
             hold = min(hold, account_hold_.loc[code]['持股'])
-            hold_ret_lst.append([strategy_name, code, row_['证券名称'], hold, price])
-    hold_strategy_today = pd.DataFrame(hold_ret_lst, columns=['策略名称', '证券代码', '证券名称', '持仓', '最新价'])
+            hold_ret_lst.append([strategy_name, code, row_['证券名称'], hold, cost__, price])
+    hold_strategy_today = pd.DataFrame(hold_ret_lst, columns=['策略名称', '证券代码', '证券名称', '持仓', '成本价', '最新价'])
     print('==============hold_strategy_today')
     print(hold_strategy_today)
 
@@ -607,7 +613,7 @@ if __name__ == "__main__":
     s_date = '2020-10-14'
 
     today = datetime.date.today()
-    # today = pd.to_datetime('2020-10-28')
+    today = pd.to_datetime('2020-10-29')
 
     calen = get_trade_days(s_date, today)
     calen = [i.strftime('%Y%m%d') for i in list(calen)]
@@ -673,6 +679,7 @@ if __name__ == "__main__":
     save_df_to_doc(document, strategy_account_all_today[['策略名称', '持仓市值', '可用资金', '净资产', '初始资产']], '策略账户概览')
 
     if len(hold_strategy_today) > 0:
+        hold_strategy_today['成本价'] = hold_strategy_today['成本价'].apply(lambda x: '%.2f' % x)
         hold_strategy_today['持仓'] = hold_strategy_today['持仓'].apply(lambda x: '%.0f' % x)
     save_df_to_doc(document, hold_strategy_today, '策略持仓')
     next_tradeday = str(next_tradeday).replace('-', '')
@@ -724,12 +731,11 @@ if __name__ == "__main__":
     subject = f'模拟盘交易报告{EndDate}'
 
     password = '9eFzgacCkDMUpPP6'
-    # password = 'Zf1991'
     sender = 'aiquant@ai-quants.com'
     # 收件人为多个收件人
-    receiver = ["dawn0zhou@163.com", "zhangfang@ai-quants.com", "wjm@ai-quants.com",
-                "zj@ai-quants.com", 'hzn@ai-quants.com']
-    # # receiver = ['zhangfang@ai-quants.com']
+    # receiver = ["dawn0zhou@163.com", "zhangfang@ai-quants.com", "wjm@ai-quants.com",
+    #             "zj@ai-quants.com", 'hzn@ai-quants.com']
+    receiver = ['aiquant@ai-quants.com']
     send = SendMessage(sender, password)
     file_path = f'{fold_path}/report/模拟盘交易报告{EndDate}.pdf'
     # send.send_email(subject, subject, receiver, file_path)

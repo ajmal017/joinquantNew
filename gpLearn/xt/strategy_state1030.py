@@ -313,10 +313,62 @@ def get_account_state(fold_path, file_lst, calen):
                 break
     net_df = pd.concat(net_df).sort_values(['交易日'])
     print(net_df)
+    asset_lst = net_df['总资产'].tolist()
+    net_lst = [i / asset_lst[0] for i in asset_lst]
+    data_daily = copy.deepcopy(net_df).rename(columns={'交易日': '日期'})
+    data_daily['账户净值'] = net_lst
+    data_daily['time'] = data_daily['日期'].apply(lambda x: pd.to_datetime(str(x)))
+    data_daily.index = data_daily['time']
+    data_daily = data_daily.drop(['time'], axis=1)
+
+    data_week = data_daily.resample('W').last()
+    data_week['开始日期'] = data_daily['日期'].resample('W').first()
+    data_week['结束日期'] = data_daily['日期'].resample('W').last()
+    data_week['总资产'] = data_daily['总资产'].resample('W').last()
+    data_week['账户净值'] = data_daily['账户净值'].resample('W').last()
+    data_week['周度利润'] = data_week['总资产'] - data_week['总资产'].shift(1)
+    data_week['周度收益'] = data_week['周度利润'] / data_week['总资产'].shift(1)
+    data_week['周度利润'] = data_week['周度利润'].fillna(value=data_week['总资产'].tolist()[0] - account_init)
+    data_week['周度收益'] = data_week['周度收益'].fillna(value=data_week['周度利润'].tolist()[0] / account_init)
+
+    data_month = data_daily.resample('M').last()
+    data_month['日期'] = data_daily['日期'].resample('M').last()
+    data_month['总资产'] = data_daily['总资产'].resample('M').last()
+    data_month['账户净值'] = data_daily['账户净值'].resample('M').last()
+    data_month['月度利润'] = data_month['总资产'] - data_month['总资产'].shift(1)
+    data_month['月度收益'] = data_month['月度利润'] / data_month['总资产'].shift(1)
+    data_month['月度利润'] = data_month['月度利润'].fillna(value=data_month['总资产'].tolist()[0] - account_init)
+    data_month['月度收益'] = data_month['月度收益'].fillna(value=data_month['总资产'].tolist()[0] / account_init - 1)
+    account_month_week_state = pd.DataFrame(
+        [['月度统计', len(data_month), data_month['月度利润'].max(), data_month['月度利润'].min(), data_month['月度收益'].max(),
+          data_month['月度收益'].min()],
+         ['周度统计', len(data_week), data_week['周度利润'].max(), data_week['周度利润'].min(), data_week['周度收益'].max(),
+          data_week['周度收益'].min()]],
+        columns=['账户统计', '周期数', '最高利润', '最低利润', '最高收益率', '最低收益率'])
+    account_month_week_state['最高利润'] = account_month_week_state['最高利润'].apply(lambda x: '%.0f' % x)
+    account_month_week_state['最低利润'] = account_month_week_state['最低利润'].apply(lambda x: '%.0f' % x)
+    account_month_week_state['最高收益率'] = account_month_week_state['最高收益率'].apply(lambda x: '%.2f%%' % (x * 100))
+    account_month_week_state['最低收益率'] = account_month_week_state['最低收益率'].apply(lambda x: '%.2f%%' % (x * 100))
+
+    data_week['开始日期'] = data_week['开始日期'].apply(lambda x: str(x)[:10])
+    data_week['结束日期'] = data_week['结束日期'].apply(lambda x: str(x)[:10])
+    data_week['总资产'] = data_week['总资产'].apply(lambda x: '%.0f' % x)
+    data_week['账户净值'] = data_week['账户净值'].apply(lambda x: '%.4f' % x)
+    data_week['周度利润'] = data_week['周度利润'].apply(lambda x: '%.0f' % x)
+    data_week['周度收益'] = data_week['周度收益'].apply(lambda x: '%.2f%%' % (x * 100))
+    data_week = data_week[['开始日期', '结束日期', '总资产', '账户净值', '周度利润', '周度收益']]
+
+    data_month['总资产'] = data_month['总资产'].apply(lambda x: '%.0f' % x)
+    data_month['账户净值'] = data_month['账户净值'].apply(lambda x: '%.4f' % x)
+    data_month['月度利润'] = data_month['月度利润'].apply(lambda x: '%.0f' % x)
+    data_month['月度收益'] = data_month['月度收益'].apply(lambda x: '%.2f%%' % (x * 100))
+    data_month['月份'] = data_month['日期'].apply(lambda x: str(x)[:6])
+    data_month = data_month[['月份', '总资产', '账户净值', '月度利润', '月度收益']]
+
+
     state_sdate = calen[0]
     state_edate = calen[-1]
-    asset_lst = net_df['总资产'].tolist()
-    net_lst = [i/asset_lst[0] for i in asset_lst]
+
     annR = annROR(net_lst, 1)
     sharp = yearsharpRatio(net_lst, 1)
     max_retrace = maxRetrace(net_lst, 1)
@@ -338,7 +390,7 @@ def get_account_state(fold_path, file_lst, calen):
     df_today['总收益'] = df_today['总收益'].apply(lambda x: '%.2f%%' % (x * 100))
     df_today['当日收益'] = df_today['当日收益'].apply(lambda x: '%.2f%%' % (x * 100))
     df_today['最大回撤'] = df_today['最大回撤'].apply(lambda x: '%.2f%%' % (x * 100))
-    return df_today
+    return df_today, data_week, data_month, account_month_week_state
 
 
 def planedorders(s_date, e_date, unique_id):
@@ -417,6 +469,8 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     trade_state_all['成交金额'] = -trade_state_all['成交金额'] * trade_state_all['bs']
     win_r_lst = []
 
+    trade_base_date_all = []
+
     for strategy_name in strategy_name_lst:
         temp = trade_state_all[trade_state_all['策略名称'] == strategy_name]
         print(temp)
@@ -434,26 +488,27 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
                     cost_i = cost_lst[i]
                     code = buy_code_lst[i]
                     sell_df = group[(group['bs'] == -1) & (group['证券代码'] == code)]
-                    if len(sell_df) == 0:
-                        continue
-                    sell_value = abs(sell_df['成交金额'].sum()) - abs(sell_df['手续费'].sum())
-                    ret = sell_value - cost_i
-                    ret_lst.append(ret)
-                    if ret > 0:
-                        win_time += 1
-                        trad_time += 1
-                    else:
-                        trad_time += 1
+                    if len(sell_df) > 0:
+                        sell_value = abs(sell_df['成交金额'].sum()) - abs(sell_df['手续费'].sum())
+                        ret = sell_value - cost_i
+                        ret_lst.append(ret)
+                        if ret > 0:
+                            win_time += 1
+                            trad_time += 1
+                        else:
+                            trad_time += 1
+                        trade_base_date_all.append([strategy_name, date, ret])
             cost_lst = []
             buy_code_lst = []
             buy_df = group[group['bs'] == 1]
             if len(buy_df) == 0:
                 buy_code_lst = []
-                continue
-            for buy_code, buy_group in buy_df.groupby(['证券代码']):
-                buy_code_lst.append(buy_code)
-                cost = abs(buy_group['成交金额'].sum()) + abs(buy_group['手续费'].sum())
-                cost_lst.append(cost)
+            else:
+                for buy_code, buy_group in buy_df.groupby(['证券代码']):
+                    buy_code_lst.append(buy_code)
+                    cost = abs(buy_group['成交金额'].sum()) + abs(buy_group['手续费'].sum())
+                    cost_lst.append(cost)
+
         win_r = 1
         odd = 1
         if trad_time > 0:
@@ -466,6 +521,8 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
                     pos_ave = abs(np.mean(ret_pos))
                 odd = pos_ave / abs(np.mean(ret_nev))
         win_r_lst.append([strategy_name, win_r, odd])
+    trade_base_date_all_df = pd.DataFrame(trade_base_date_all, columns=['策略名称', '日期', '收益'])
+
     win_df = pd.DataFrame(win_r_lst, columns=['策略名称', '胜率', '盈亏比'])
 
 
@@ -474,9 +531,14 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     hold_df_back = trade_state_all[(trade_state_all['日期'] > calen[0])]
     hold_df = pd.concat([hold_df_firstday, hold_df_back])[['策略名称', '证券代码', '证券名称', '持仓']]\
         .groupby(['策略名称', '证券代码', '证券名称']).sum().reset_index(drop=False)
+
     print('==============hold_df')
     print(hold_df)
     hold_today = hold_df[hold_df['持仓'] > 0]
+    hold_today = trade_state_all[['策略名称', '证券代码', '证券名称', '日期', '成交均价', 'bs']]\
+        .merge(hold_today, on=['策略名称', '证券代码', '证券名称'])
+    hold_today = hold_today[(hold_today['日期'] == hold_today['日期'].max()) & (hold_today['bs'] == 1)]
+
     account_hold_ = account_hold[['证券代码', '持股', '最新价']]
     account_hold_lst = account_hold['证券代码'].tolist()
     account_hold_ = account_hold_.set_index(['证券代码'])
@@ -492,9 +554,10 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
                 continue
             hold = row_['持仓']
             price = account_hold_.loc[code]['最新价']
+            cost__ = row_['成交均价']
             hold = min(hold, account_hold_.loc[code]['持股'])
-            hold_ret_lst.append([strategy_name, code, row_['证券名称'], hold, price])
-    hold_strategy_today = pd.DataFrame(hold_ret_lst, columns=['策略名称', '证券代码', '证券名称', '持仓', '最新价'])
+            hold_ret_lst.append([strategy_name, code, row_['证券名称'], hold, cost__, price])
+    hold_strategy_today = pd.DataFrame(hold_ret_lst, columns=['策略名称', '证券代码', '证券名称', '持仓', '成本价', '最新价'])
     print('==============hold_strategy_today')
     print(hold_strategy_today)
 
@@ -581,7 +644,7 @@ def calculate_strategy_net(calen, next_tradeday, trade_fold_path, trade_file_lst
     plt.title(title_str)
     plt.savefig(fold_path + 'fig/' + 'net_' + calen[-1] + '.png')
 
-    return strategy_account_all_today, hold_strategy_today, strategy_state_df
+    return strategy_account_all_today, hold_strategy_today, strategy_state_df, trade_base_date_all_df
 
 
 def get_strategy_signal(strategy_name_lst, date):
@@ -592,6 +655,78 @@ def get_strategy_signal(strategy_name_lst, date):
         lst.append([strategy_name, date, buy_markets, sell_markets])
     ret = pd.DataFrame(lst, columns=['策略名称', '日期', '当日买入信号', '当日卖出信号'])
     return ret
+
+
+def get_week_month_state(trade_base_date_all_df, strategy_china_name_lst):
+    date_state = []
+    for strategy_name in strategy_china_name_lst:
+        trade_base_date_ = trade_base_date_all_df[trade_base_date_all_df['策略名称'] == strategy_name]
+        if len(trade_base_date_) == 0:
+            date_state.append([strategy_name, trade_base_date_['日期'].max(), 0, 0, 0, 0])
+            continue
+        for date, group in trade_base_date_.groupby(['日期']):
+            date_state.append([strategy_name, date, len(group), group['收益'].max(), group['收益'].min(), group['收益'].sum()])
+    date_state_df = pd.DataFrame(date_state, columns=['策略名称', '日期', '交易次数', '最大盈利', '最大亏损', '总收益'])
+    month_week_state_lst = []
+    df_week = []
+    df_month = []
+
+    for strategy_name, data_daily in date_state_df.groupby(['策略名称']):
+        data_daily['time'] = pd.to_datetime(data_daily['日期'])
+        data_daily.index = data_daily['time']
+        data_daily = data_daily.drop(['time'], axis=1)
+
+        data_month = data_daily.resample('M').last()
+        data_month['日期'] = data_daily['日期'].resample('M').last()
+        data_month['交易次数'] = data_daily['交易次数'].resample('M').sum()
+        data_month['单笔最大利润'] = data_daily['最大盈利'].resample('M').max()
+        data_month['单笔最小利润'] = data_daily['最大亏损'].resample('M').min()
+        data_month['月度收益'] = data_daily['总收益'].resample('M').sum()
+        data_month['策略名称'] = strategy_name
+
+        data_week = data_daily.resample('W').last()
+        data_week['开始日期'] = data_daily['日期'].resample('W').first()
+        data_week['结束日期'] = data_daily['日期'].resample('W').last()
+        data_week['交易次数'] = data_daily['交易次数'].resample('W').sum()
+        data_week['单笔最大利润'] = data_daily['最大盈利'].resample('W').max()
+        data_week['单笔最小利润'] = data_daily['最大亏损'].resample('W').min()
+        data_week['周度收益'] = data_daily['总收益'].resample('W').sum()
+        data_week['策略名称'] = strategy_name
+        data_week = data_week.dropna()
+
+        month_week_state_lst.append([strategy_name, '月度统计', len(data_month), data_month['月度收益'].max(), data_month['月度收益'].min(), data_month['交易次数'].sum()])
+        month_week_state_lst.append(
+            [strategy_name, '周度统计', len(data_week), data_week['周度收益'].max(), data_week['周度收益'].min(), data_week['交易次数'].sum()])
+
+
+        df_week.append(data_week)
+        df_month.append(data_month)
+
+    strategy_month_week_state = pd.DataFrame(month_week_state_lst,
+                                        columns=['策略名称', '统计', '周期数', '最高利润', '最低利润', '交易次数'])
+    strategy_month_week_state['交易次数'] = strategy_month_week_state['交易次数'].apply(lambda x: '%.0f' % x)
+    strategy_month_week_state['最高利润'] = strategy_month_week_state['最高利润'].apply(lambda x: '%.2f' % x)
+    strategy_month_week_state['最低利润'] = strategy_month_week_state['最低利润'].apply(lambda x: '%.2f' % x)
+
+    df_month = pd.concat(df_month)
+    df_week = pd.concat(df_week)
+    df_month['交易次数'] = df_month['交易次数'].apply(lambda x: '%.0f' % x)
+    df_month['单笔最大利润'] = df_month['单笔最大利润'].apply(lambda x: '%.2f' % x)
+    df_month['单笔最小利润'] = df_month['单笔最小利润'].apply(lambda x: '%.2f' % x)
+    df_month['月度收益'] = df_month['月度收益'].apply(lambda x: '%.2f' % x)
+    df_month['月份'] = data_month['日期'].apply(lambda x: str(x)[:6])
+    df_month = df_month[['策略名称', '月份', '交易次数', '单笔最大利润', '单笔最小利润', '月度收益']]
+
+    df_week['开始日期'] = df_week['开始日期'].apply(lambda x: str(x)[:10])
+    df_week['结束日期'] = df_week['结束日期'].apply(lambda x: str(x)[:10])
+    df_week['交易次数'] = df_week['交易次数'].apply(lambda x: '%.0f' % x)
+    df_week['单笔最大利润'] = df_week['单笔最大利润'].apply(lambda x: '%.2f' % x)
+    df_week['单笔最小利润'] = df_week['单笔最小利润'].apply(lambda x: '%.2f' % x)
+    df_week['周度收益'] = df_week['周度收益'].apply(lambda x: '%.2f' % x)
+    df_week = df_week[['策略名称', '开始日期', '结束日期', '交易次数', '单笔最大利润', '单笔最小利润', '周度收益']]
+    return df_month, df_week, strategy_month_week_state
+
+
 
 
 if __name__ == "__main__":
@@ -607,7 +742,7 @@ if __name__ == "__main__":
     s_date = '2020-10-14'
 
     today = datetime.date.today()
-    today = pd.to_datetime('2020-10-29')
+    # today = pd.to_datetime('2020-10-29')
 
     calen = get_trade_days(s_date, today)
     calen = [i.strftime('%Y%m%d') for i in list(calen)]
@@ -643,11 +778,14 @@ if __name__ == "__main__":
     today_account = get_today_account(fold_path_account, file_lst_account, account_init, EndDate)
     save_df_to_doc(document, today_account, '账户总览')
     # 账户统计
-    account_state = get_account_state(fold_path_account, file_lst_account, calen)
+    account_state, account_week, account_month, account_month_week_state = get_account_state(fold_path_account, file_lst_account, calen)
     save_df_to_doc(document, account_state, '账户统计')
+    save_df_to_doc(document, account_month_week_state, '账户周度月度统计')
+    save_df_to_doc(document, account_month, '账户月度统计明细')
+    save_df_to_doc(document, account_week, '账户周度统计明细')
     # 账户持仓
     today_hold = get_date_hold(fold_path_hold, file_lst_hold, EndDate)
-    strategy_account_all_today, hold_strategy_today, strategy_state_df = calculate_strategy_net(
+    strategy_account_all_today, hold_strategy_today, strategy_state_df, trade_base_date_all_df = calculate_strategy_net(
         calen, next_tradeday, fold_path_trade, file_lst_trade, fold_path_strategy, today_hold, strategy_china_name_lst)
     if len(today_hold) > 0:
         today_hold = today_hold[today_hold['持股'] > 0]
@@ -673,6 +811,7 @@ if __name__ == "__main__":
     save_df_to_doc(document, strategy_account_all_today[['策略名称', '持仓市值', '可用资金', '净资产', '初始资产']], '策略账户概览')
 
     if len(hold_strategy_today) > 0:
+        hold_strategy_today['成本价'] = hold_strategy_today['成本价'].apply(lambda x: '%.2f' % x)
         hold_strategy_today['持仓'] = hold_strategy_today['持仓'].apply(lambda x: '%.0f' % x)
     save_df_to_doc(document, hold_strategy_today, '策略持仓')
     next_tradeday = str(next_tradeday).replace('-', '')
@@ -693,6 +832,10 @@ if __name__ == "__main__":
     # save_df_to_doc(document, strategy_state, '策略统计%s-%s' %(StartDate, EndDate))
     document.add_heading(f'净值曲线')
     document.add_picture(f'{fold_path}/fig/net_{EndDate}.png', width=Inches(6.0))
+    df_month, df_week, strategy_month_week_state = get_week_month_state(trade_base_date_all_df, strategy_china_name_lst)
+    save_df_to_doc(document, strategy_month_week_state, '策略周度月度统计')
+    save_df_to_doc(document, df_month, '策略月度统计明细')
+    save_df_to_doc(document, df_week, '策略周度统计明细')
     signal_today = get_strategy_signal(strategy_china_name_lst, EndDate[:4] + '-' + EndDate[4:6] + '-' + EndDate[6:])
     save_df_to_doc(document, signal_today, '当日买卖信号')
     sell_plan_df = get_sell_plan(fold_path_hold, file_lst_hold, hq_last_date)
@@ -722,7 +865,7 @@ if __name__ == "__main__":
     FormatConvert.word_to_pdf(f'{fold_path}/report/模拟盘交易报告{EndDate}.docx',
                               f'{fold_path}/report/模拟盘交易报告{EndDate}.pdf')
     subject = f'模拟盘交易报告{EndDate}'
-
+    content = f'见附件'
     password = '9eFzgacCkDMUpPP6'
     sender = 'aiquant@ai-quants.com'
     # 收件人为多个收件人
@@ -731,4 +874,4 @@ if __name__ == "__main__":
     receiver = ['aiquant@ai-quants.com']
     send = SendMessage(sender, password)
     file_path = f'{fold_path}/report/模拟盘交易报告{EndDate}.pdf'
-    # send.send_email(subject, subject, receiver, file_path)
+    # send.send_email(subject, content, receiver, file_path)
