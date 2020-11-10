@@ -816,7 +816,7 @@ if __name__ == "__main__":
     save_df_to_doc(document, hold_strategy_today, '策略持仓')
     next_tradeday = str(next_tradeday).replace('-', '')
     hold_strategy_today.to_csv(fold_path_hold + 'hold_all_' + next_tradeday + '.csv', encoding='gbk')
-    if len(hold_strategy_today) > 0:
+    if len(strategy_state_df) > 0:
         strategy_state_df['当日盈亏'] = strategy_state_df['当日盈亏'].apply(lambda x: '%.0f' % x)
         # strategy_state_df['净值'] = strategy_state_df['净值'].apply(lambda x: '%.2f' % x)
         strategy_state_df['夏普'] = strategy_state_df['夏普'].apply(lambda x: '%.2f' % x)
