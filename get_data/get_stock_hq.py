@@ -75,8 +75,11 @@ def stock_price(sec, period, sday, eday):
     #     .assign(trade_date=lambda df: df.trade_date.apply(lambda x: str(x)[:16]))[
     #     ['trade_date', 'open', 'high', 'low', 'close', 'volume']].dropna().set_index(['trade_date'])
     temp = get_price(sec, start_date=sday, end_date=eday, frequency=period,
-                     skip_paused=True, fq='pre', count=None)[
-        ['open', 'high', 'low', 'close', 'volume']].dropna()
+                     skip_paused=True, fq='pre', count=None).reset_index()\
+        .rename(columns={'index': 'date_time'})\
+        .assign(date_time=lambda df: df.date_time.apply(lambda x: str(x)[:16]))
+    temp = temp[
+        ['date_time', 'open', 'high', 'low', 'close', 'volume', 'money']].dropna()
     # temp['stock_code'] = sec
     return temp
 
@@ -95,21 +98,25 @@ if __name__ == '__main__':
     date = datetime.date.today()
 
     sday = '2010-01-01'
-    eday = '2020-08-31'
+    eday = '2020-12-01'
 
     index_code_lst = ['000300.XSHG', '000016.XSHG', '000905.XSHG', '399006.XSHE']
+    # index_code_lst = ['000985.XSHG']
+    #
     # for i in range(len(index_code_lst)):
     #     code = index_code_lst[i]
     #     symbol_lst = index_stocks(code)
     #     symbol_lst = normalize_code(symbol_lst)
-    symbol_lst = ['600519.XSHG']
-    for symbol in symbol_lst:
+    # print(len(symbol_lst))
+    # symbol_lst = ['600519.XSHG']
+    for symbol in index_code_lst:
         # code = code_dic[symbol]
+        print(symbol)
         code = symbol
-        for fred in ['1m']:
+        for fred in ['daily']:
             temp = stock_price(code, fred, sday, eday)
             print(temp)
-            temp.to_csv('e:/data/stock_hq/' + code + '_' + fred + '.txt')
+            temp.to_csv('c:/e/data/stock_hq/' + code + '_' + fred + '.csv')
             # temp.to_csv('e:/data/future_index/' + symbol + '_' + fred + '_index.csv')
 
 
