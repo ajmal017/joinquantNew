@@ -150,35 +150,38 @@ def get_longshort_state_from_cumsum(dataset, cols_features, max_states):
     print('做多隐状态：%s, 做空隐状态：%s, 空仓隐状态：%s' %(long_states, short_states, random_states))
     return model, hidden_states, long_states, short_states, random_states
 
-def get_hmm_pos_df_all(index_code_lst, train_period, test_period, index_hq_dic, future_period,
-                       factor_lst, max_states):
+def get_hmm_pos_df_all(index_code_lst, param_dict, index_hq_dic, future_period, factor_lst, max_states):
     pos_df_all = []
 
     for j in range(len(index_code_lst)):
         index_code = index_code_lst[j]
+        param = param_dict[index_code]
         index_hq = index_hq_dic[index_code]
-        # index_hq = index_hq[index_hq['trade_date'] <= hq_last_date]
         data_set = get_dataset(index_hq, factor_lst, future_period)
-        for i in range(train_period, len(data_set), test_period):
-            if i + test_period >= len(data_set):
-                train_set = data_set.iloc[i - train_period:i]
-                test_set = data_set.iloc[i:]
-            else:
-                continue
-        model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
-            train_set, factor_lst, max_states)
+        date = data_set.index.tolist()[-1]
+        pos_lst = []
+        for (train_period, test_period) in param:
+            for i in range(train_period, len(data_set), test_period):
+                if i + test_period >= len(data_set):
+                    train_set = data_set.iloc[i - train_period:i]
+                    test_set = data_set.iloc[i:]
+                else:
+                    continue
+            model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
+                train_set, factor_lst, max_states)
 
-        hidden_states_predict = model.predict(test_set[factor_lst])
-        date = test_set.index.tolist()[-1]
-        pos = None
-        predict = hidden_states_predict[-1]
-        if predict in long_states:
-            pos = 1
-        elif predict in short_states:
-            pos = -1
-        elif predict in random_states:
-            pos = 0
-        pos_df_all.append([date, index_code, pos])
+            hidden_states_predict = model.predict(test_set[factor_lst])
+
+            pos = None
+            predict = hidden_states_predict[-1]
+            if predict in long_states:
+                pos = 1
+            elif predict in short_states:
+                pos = -1
+            elif predict in random_states:
+                pos = 0
+            pos_lst.append(pos)
+        pos_df_all.append([date, index_code, np.mean(pos_lst)])
     pos_df_all = pd.DataFrame(pos_df_all, columns=['trade_date', 'symbol', 'weight'])
     pos_df_all.index = pos_df_all['symbol']
     return pos_df_all
@@ -235,37 +238,50 @@ if __name__ == '__main__':
     balance = 6
     strategy_id = 'hmm'
     fold_path = 'c://g//trading_hmm//'
+    resualt_path = 'c:/e/hmm/resualt/stockindex/'
     # 收件人为多个收件人
     # receiver = ['zxdokok@sina.com','43521385@qq.com','542362275@qq.com', '3467518502@qq.com', 'xiahutao@163.com']
     receiver = ['xiahutao@163.com', '3467518502@qq.com', '542362275@qq.com']
     today = datetime.date.today()
-    index_code_lst = ['AG', 'I', 'JM', 'MA', 'PP', 'RM', 'RU', 'SC', 'SM', 'TA', 'IF', 'Y', 'SN', 'ZC', 'AP', 'HC',
-                   'AU', 'P', 'RB', 'V', 'B', 'CU', 'CF', 'L', 'IH', 'J', 'NI', 'IC', 'AL', 'BU', 'FG', 'JD', 'M', 'ZN',
-                      'A', 'SF', 'OI', 'SR']  # sharp>0.2所有品种
-    # index_code_lst = ['I']
+    StartDate = '2017-01-01'
+
+    index_code_lst = ['IF', 'IH', 'IC']
+    asset_lst = ['000300.XSHG', '000016.XSHG', '000905.XSHG']
     normalize_code_future = get_normal_future_index_code()
+    param_all = pd.read_csv(resualt_path + 'para_opt_history.csv') \
+        .assign(s_date=lambda df: df.s_date.apply(lambda x: str(x))) \
+        .assign(e_date=lambda df: df.e_date.apply(lambda x: str(x)))
+    param_dict = {i: {} for i in index_code_lst}
+    for i in range(len(asset_lst)):
+        code = index_code_lst[i]
+        temp = param_all[param_all['asset'] == asset_lst[i]]
+        # print(len(temp))
+        train_days_lst = temp['train_days'].tolist()
+        test_days_lst = temp['test_days'].tolist()
+        param_dict[code] = [
+                (train_days_lst[i], test_days_lst[i]) for i in range(len(train_days_lst))]
     N = 100
     num = 0
     bars = 252 * 3
-    train_period = 240
-    test_period = 60
     future_period = 1
     factor_lst = ['alpha000']
     max_states = 6
     calen = get_trade_days(count=bars)
     calen = list(calen)
     if today in calen:
-        calen, EndDate, StartDate, hq_last_date = get_date(calen)
+        calen, EndDate, s_date, hq_last_date = get_date(calen)
         index_hq_dic = {}
         EndDate = EndDate.strftime('%Y-%m-%d')
         date = EndDate
         close_dict = {}
-        for index_code in index_code_lst:
-            code = normalize_code_future[index_code]
+        for i in range(len(index_code_lst)):
+            index_code = index_code_lst[i]
+            # code = normalize_code_future[index_code]
+            code = asset_lst[i]
             index_hq = stock_price(code, 'daily', StartDate, EndDate)
             index_hq_dic[index_code] = index_hq
             close_dict[index_code] = index_hq[index_hq['trade_date'] == EndDate].close.tolist()[0]
-        pos_df_all_ymjh = get_hmm_pos_df_all(index_code_lst, train_period, test_period, index_hq_dic, future_period,
+        pos_df_all_ymjh = get_hmm_pos_df_all(index_code_lst, param_dict, index_hq_dic, future_period,
                        factor_lst, max_states)
         print(pos_df_all_ymjh)
 
@@ -281,12 +297,70 @@ if __name__ == '__main__':
         trading_info = get_signal(res_n, aum, balance, EndDate, close_dict)
         trading_info.to_csv(fold_path + 'position_hmm_' + EndDate + '.csv')
         subject = date + strategy_id
-        send_email(trading_info, subject, receiver)
+        # send_email(trading_info, subject, receiver)
 
         trading_info['position'] = trading_info['position'].apply(lambda x: int(np.around(x, 0)))
         trading_info.index = trading_info['trading_code']
         print(trading_info)
         code_lst = trading_info.trading_code.tolist()
+        while datetime.datetime.now().hour < 15:
+            print('==========================================================================================')
+            orders = api.get_order()
+            for oid, order in orders.items():
+                if order.status == 'ALIVE':
+                    print(order.status)
+                    api.cancel_order(order)
+
+            positions = api.get_position()
+            for symbol, order in positions.items():
+                if symbol not in code_lst:
+                    if order.pos_long > 0:
+                        Trd.insert_order_sp_limit(symbol)
+                    if order.pos_short > 0:
+                        Trd.insert_order_bp_limit(symbol)
+
+            for code in code_lst:
+                position_account = api.get_position(code)
+                position_long = position_account.pos_long
+                position_short = position_account.pos_short
+                position = trading_info.loc[code]['position']
+                if code == 'DCE.y2009':
+                    a = 0
+                if position == 0 and position_short == 0 and position_long == 0:
+                    print('%s:   仓位%s手, 状态：%s' % (code, position, '完成'))
+                    continue
+                elif position == position_long and position_short == 0:
+                    print('%s: 多头持仓%s手, 状态：%s' % (code, position, '完成'))
+                    continue
+                elif position == -position_short and position_long == 0:
+                    print('%s: 空头持仓%s手, 状态：%s' % (code, position, '完成'))
+                    continue
+                else:
+                    print('%s:   仓位%s手, 状态：%s' % (code, position, '未完成'))
+                quote = api.get_quote(code)
+                if position > 0:
+                    if position_short > 0:
+                        order_bp = Trd.insert_order_bp_limit(code)
+                    diff = position - position_long
+                    if diff > 0:
+                        order = Trd.insert_order_bk_limit(code, int(diff))
+                    elif diff < 0:
+                        order = Trd.insert_order_sp_limit(code, -int(diff))
+                if position < 0:
+                    if position_long > 0:
+                        order_sp = Trd.insert_order_sp_limit(code)
+                    diff = -position - position_short
+                    if diff > 0:
+                        order = Trd.insert_order_sk_limit(code, int(diff))
+                    elif diff < 0:
+                        order = Trd.insert_order_bp_limit(code, -int(diff))
+                if position == 0:
+                    if position_short > 0:
+                        order_bp = Trd.insert_order_bp_limit(code)
+                    if position_long > 0:
+                        order_sp = Trd.insert_order_sp_limit(code)
+            t_now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')[-8:]
+            time.sleep(60)
 
 
 

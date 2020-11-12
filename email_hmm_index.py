@@ -171,59 +171,77 @@ def get_longshort_state_from_cumsum(dataset, cols_features, max_states):
 def trans_state_to_bs(x, long_states, short_states, random_states):
     pos = None
     if x in long_states:
-        pos = 'long'
+        pos = 1
     elif x in short_states:
-        pos = 'short'
+        pos = -1
     elif x in random_states:
-        pos = 'kong'
+        pos = 0
     return pos
 
 
-def get_hmm_pos_df_all(index_code_lst, train_period, test_period, index_hq_dic, future_period,
+def get_hmm_pos_df_all(index_code_lst, param_dict, index_hq_dic, future_period,
                        factor_lst, max_states, name_lst):
     pos_df_all = pd.DataFrame([], columns=['trade_date'])
     for j in range(len(index_code_lst)):
         index_code = index_code_lst[j]
+        param = param_dict[index_code]
         index_name = name_lst[j]
         index_hq = index_hq_dic[index_code]
         data_set = get_dataset(index_hq, factor_lst, future_period)
-        for i in range(train_period, len(data_set), test_period):
-            if i + test_period >= len(data_set):
-                train_set = data_set.iloc[i - train_period:i]
-                test_set = data_set.iloc[i:]
-            else:
-                continue
-        model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
-            train_set, factor_lst, max_states)
-        hidden_states_predict = model.predict(test_set[factor_lst])
-        pos_df = test_set[['trade_date']].reset_index(drop=True)
-        pos_df[index_name] = hidden_states_predict
-        pos_df[index_name] = pos_df[index_name].apply(lambda x: trans_state_to_bs(x, long_states, short_states, random_states))
-        pos_df_all = pos_df_all.merge(pos_df, on=['trade_date'], how='outer')
+        pos_df = data_set[['trade_date']].reset_index(drop=True)
+        for m in range(len(param)):
+            (train_period, test_period) = param[m]
+            for i in range(train_period, len(data_set), test_period):
+                if i + test_period >= len(data_set):
+                    train_set = data_set.iloc[i - train_period:i]
+                    test_set = data_set.iloc[i:]
+                else:
+                    continue
+            model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
+                train_set, factor_lst, max_states)
+            hidden_states_predict = model.predict(test_set[factor_lst])
+            pos_temp = test_set[['trade_date']].reset_index(drop=True)
+            pos_temp['pos%s' % m] = hidden_states_predict
+            pos_temp['pos%s' % m] = pos_temp['pos%s' % m].apply(lambda x: trans_state_to_bs(x, long_states, short_states, random_states))
+            pos_df = pos_df.merge(pos_temp, on=['trade_date'])
+        pos_df = pos_df.set_index(['trade_date'])
+        pos_df[index_name] = pos_df.mean(axis=1)
+
+        pos_df = pos_df.reset_index(drop=False)
+        pos_df_all = pos_df_all.merge(pos_df[['trade_date', index_name]], on=['trade_date'], how='outer')
     return pos_df_all
 
 
-def get_hmm_pos_df_all_open(index_code_lst, train_period, test_period, index_hq_dic, future_period,
+def get_hmm_pos_df_all_open(index_code_lst, param_dict, index_hq_dic, future_period,
                        factor_lst, max_states, name_lst):
     pos_df_all = pd.DataFrame([], columns=['trade_date'])
     for j in range(len(index_code_lst)):
         index_code = index_code_lst[j]
+        param = param_dict[index_code]
         index_name = name_lst[j]
         index_hq = index_hq_dic[index_code]
         data_set = get_dataset_open(index_hq, factor_lst, future_period)
-        for i in range(train_period, len(data_set), test_period):
-            if i + test_period >= len(data_set):
-                train_set = data_set.iloc[i - train_period:i]
-                test_set = data_set.iloc[i:]
-            else:
-                continue
-        model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
-            train_set, factor_lst, max_states)
-        hidden_states_predict = model.predict(test_set[factor_lst])
-        pos_df = test_set[['trade_date']].reset_index(drop=True)
-        pos_df['O' + index_name] = hidden_states_predict
-        pos_df['O' + index_name] = pos_df['O' + index_name].apply(lambda x: trans_state_to_bs(x, long_states, short_states, random_states))
-        pos_df_all = pos_df_all.merge(pos_df, on=['trade_date'], how='outer')
+        pos_df = data_set[['trade_date']].reset_index(drop=True)
+        for m in range(len(param)):
+            (train_period, test_period) = param[m]
+            for i in range(train_period, len(data_set), test_period):
+                if i + test_period >= len(data_set):
+                    train_set = data_set.iloc[i - train_period:i]
+                    test_set = data_set.iloc[i:]
+                else:
+                    continue
+            model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
+                train_set, factor_lst, max_states)
+            hidden_states_predict = model.predict(test_set[factor_lst])
+            pos_temp = test_set[['trade_date']].reset_index(drop=True)
+            pos_temp['pos%s' % m] = hidden_states_predict
+            pos_temp['pos%s' % m] = pos_temp['pos%s' % m].apply(
+                lambda x: trans_state_to_bs(x, long_states, short_states, random_states))
+            pos_df = pos_df.merge(pos_temp, on=['trade_date'])
+        pos_df = pos_df.set_index(['trade_date'])
+        pos_df['o' + index_name] = pos_df.mean(axis=1)
+        pos_df = pos_df.reset_index(drop=False)
+        pos_df_all = pos_df_all.merge(pos_df[['trade_date', 'o' + index_name]], on=['trade_date'], how='outer')
     return pos_df_all
 
 
@@ -275,20 +293,29 @@ if __name__ == '__main__':
     aum = 10000000
     balance = 6
     strategy_id = 'hmm'
-    fold_path = 'c://g//trading_hmm//'
+    fold_path = 'c://e//hmm//resualt//stockindex//'
     # 收件人为多个收件人
     # receiver = ['zxdokok@sina.com','43521385@qq.com','542362275@qq.com', '3467518502@qq.com', 'xiahutao@163.com']
     receiver = ['xiahutao@163.com', '3467518502@qq.com', '542362275@qq.com']
     today = datetime.date.today()
-    index_code_lst = ['IC', 'IF', 'IH']
-    code_name_lst = ['中证500', '沪深300', '上证50']
-    normalize_code_future = get_normal_future_index_code()
+    asset_lst = ['000300.XSHG', '000016.XSHG', '000905.XSHG', '399006.XSHE']
+    code_name_lst = ['沪深300', '上证50', '中证500', '创业板']
+    param_all = pd.read_csv(fold_path + 'para_opt_history.csv') \
+        .assign(s_date=lambda df: df.s_date.apply(lambda x: str(x))) \
+        .assign(e_date=lambda df: df.e_date.apply(lambda x: str(x)))
+    param_dict = {i: {} for i in asset_lst}
+    for i in range(len(asset_lst)):
+        code = asset_lst[i]
+        temp = param_all[param_all['asset'] == code]
+        # print(len(temp))
+        train_days_lst = temp['train_days'].tolist()
+        test_days_lst = temp['test_days'].tolist()
+        param_dict[code] = [
+            (train_days_lst[i], test_days_lst[i]) for i in range(len(train_days_lst))]
     N = 100
     num = 0
     StartDate = '2017-01-01'
     bars = 252 * 3
-    train_period = 270
-    test_period = 60
     future_period = 1
     factor_lst = ['alpha000']
     max_states = 6
@@ -300,16 +327,16 @@ if __name__ == '__main__':
         EndDate = EndDate.strftime('%Y-%m-%d')
         date = EndDate
         close_dict = {}
-        for index_code in index_code_lst:
-            code = normalize_code_future[index_code]
+        for index_code in asset_lst:
+            code = index_code
             index_hq = stock_price(code, 'daily', StartDate, EndDate)
             index_hq_dic[index_code] = index_hq
             close_dict[index_code] = index_hq[index_hq['trade_date'] == EndDate].close.tolist()[0]
-        pos_df_all_ymjh = get_hmm_pos_df_all(index_code_lst, train_period, test_period, index_hq_dic, future_period,
+        pos_df_all_ymjh = get_hmm_pos_df_all(asset_lst, param_dict, index_hq_dic, future_period,
                        factor_lst, max_states, code_name_lst)
         print(pos_df_all_ymjh)
 
-        pos_df_all_ymjh_open = get_hmm_pos_df_all_open(index_code_lst, train_period, test_period, index_hq_dic, future_period,
+        pos_df_all_ymjh_open = get_hmm_pos_df_all_open(asset_lst, param_dict, index_hq_dic, future_period,
                                              factor_lst, max_states, code_name_lst)
         print(pos_df_all_ymjh_open)
         ret = pos_df_all_ymjh.merge(pos_df_all_ymjh_open, on=['trade_date'])
@@ -320,8 +347,8 @@ if __name__ == '__main__':
 
         # res_n.columns = ['weight']
         print(res_n)
-        # res_n.to_csv(fold_path + 'temp//' + strategy_id + '_' + EndDate + '.csv')
-        send_email(res_n, date+':HMM', receiver)
+        res_n.to_csv(fold_path + 'index' + '_' + EndDate + '.csv', encoding='gbk')
+        send_email(res_n, date+'HMM_stockindex', receiver)
 
 
 

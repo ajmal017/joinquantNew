@@ -12,6 +12,7 @@ print(sys.path)
 sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquant')  # 新加入的
 print(sys.path)
 import os
+from multiprocessing import Pool, cpu_count
 from jqdatasdk import *
 import copy
 from email_fuction import send_email
@@ -184,6 +185,7 @@ def get_hmm_pos_df_all(index_code_lst, train_period, test_period, index_hq_dic, 
     pos_df = []
     for j in range(len(index_code_lst)):
         index_code = index_code_lst[j]
+        print(j)
         index_hq = index_hq_dic[index_code]
         data_set = get_dataset(index_hq, factor_lst, future_period)
         for i in range(train_period, len(data_set), test_period):
@@ -207,6 +209,7 @@ def get_hmm_pos_df_all_open(index_code_lst, train_period, test_period, index_hq_
                        factor_lst, max_states):
     pos_df = []
     for j in range(len(index_code_lst)):
+        print(j)
         index_code = index_code_lst[j]
 
         index_hq = index_hq_dic[index_code]
@@ -221,7 +224,6 @@ def get_hmm_pos_df_all_open(index_code_lst, train_period, test_period, index_hq_
             train_set, factor_lst, max_states)
         hidden_states_predict = model.predict(test_set[factor_lst])
         pos_df.append([test_set.index.tolist()[-1], index_code, trans_state_to_bs(hidden_states_predict[-1], long_states, short_states, random_states)])
-
     pos_df_all = pd.DataFrame(pos_df, columns=['date', 'code', '开盘模型'])
     return pos_df_all
 
@@ -270,11 +272,12 @@ def get_signal(signal, aum, balance, EndDate, close_dict):
 
 
 if __name__ == '__main__':
-
+    t0 = time.time()
+    # pool = Pool(max(1, cpu_count() - 5))
     aum = 10000000
     balance = 6
     strategy_id = 'hmm'
-    fold_path = 'c://g//trading_hmm//'
+    fold_path = 'c://e//hmm//resualt//stock//day_predict//'
     # 收件人为多个收件人
     # receiver = ['zxdokok@sina.com','43521385@qq.com','542362275@qq.com', '3467518502@qq.com', 'xiahutao@163.com']
     receiver = ['xiahutao@163.com', '3467518502@qq.com', '542362275@qq.com']
@@ -295,35 +298,48 @@ if __name__ == '__main__':
     calen = get_trade_days(count=bars)
     calen = list(calen)
     if today in calen:
-        idx_code = '000985.XSHG'
-        symbol_lst = index_stocks(idx_code)
-        symbol_lst = ['300657', '603187.XSHG', '002050.XSHE', '000333.XSHE', '000002.XSHE', '002027.XSHE',
+        idx_code_lst = ['000300.XSHG', '000905.XSHG']
+        symbol_lst_all = []
+        for idx_code in idx_code_lst:
+            symbol_lst_all.extend(index_stocks(idx_code))
+        symbol_lst = ['300657.XSHE', '603187.XSHG', '002050.XSHE', '000333.XSHE', '000002.XSHE', '002027.XSHE',
                       '002410.XSHE', '300662.XSHE', '002271.XSHE', '300760.XSHE', '300012.XSHE', '300285.XSHE',
                       '600763.XSHG', '300413.XSHE', '002352.XSHE', '600519.XSHG', '300783.XSHE', '300138.XSHE']
+        symbol_lst_all.extend(symbol_lst)
+        print(len(symbol_lst_all))
+        symbol_lst_all = list(set(symbol_lst_all))
+        print(len(symbol_lst_all))
+        asset_lst_all = normalize_code(symbol_lst_all)
         asset_lst = normalize_code(symbol_lst)
         calen, EndDate, hq_last_date = get_date(calen)
         index_hq_dic = {}
         EndDate = EndDate.strftime('%Y-%m-%d')
         date = EndDate
         close_dict = {}
-        for index_code in asset_lst:
+        for index_code in asset_lst_all:
             index_hq = stock_price(index_code, 'daily', StartDate, EndDate)
+            print(index_hq.tail(1))
             index_hq_dic[index_code] = index_hq
             close_dict[index_code] = index_hq[index_hq['trade_date'] == EndDate].close.tolist()[0]
-        pos_df_all_ymjh = get_hmm_pos_df_all(asset_lst, train_period, test_period, index_hq_dic, future_period,
+        pos_df_all_ymjh = get_hmm_pos_df_all(asset_lst_all, train_period, test_period, index_hq_dic, future_period,
                        factor_lst, max_states)
         print(pos_df_all_ymjh)
 
-        pos_df_all_ymjh_open = get_hmm_pos_df_all_open(asset_lst, train_period, test_period, index_hq_dic, future_period,
+        pos_df_all_ymjh_open = get_hmm_pos_df_all_open(asset_lst_all, train_period, test_period, index_hq_dic, future_period,
                                              factor_lst, max_states)
         print(pos_df_all_ymjh_open)
         ret = pos_df_all_ymjh.merge(pos_df_all_ymjh_open, on=['date', 'code'])
-
-        ret['股票名称'] = ret['code'].apply(lambda x: get_security_info(x).display_name)
-        ret['code'] = ret['code'].apply(lambda x: 'S' + x[:6])
+        display_name = get_all_securities(types=['stock'])[['display_name']].rename(columns={'display_name': '股票名称'})
+        display_name['code'] = display_name.index
+        ret = ret.merge(display_name, on=['code'])
         ret = ret[['date', 'code', '股票名称', '收盘模型', '开盘模型']].set_index(['date']).sort_values(['code'])
         print(ret)
-        send_email(ret, date+':HMM_stock', receiver)
+        ret.to_csv(fold_path + 'hs300zz500_%s.csv' % EndDate, encoding='gbk')
+        ret_email = ret[ret['code'].isin(symbol_lst)]
+        ret_email['code'] = ret_email['code'].apply(lambda x: 'S' + x[:6])
+        print(ret_email)
+        send_email(ret_email, date+':HMM_stock', receiver)
+        print(time.time() - t0)
 
 
 
