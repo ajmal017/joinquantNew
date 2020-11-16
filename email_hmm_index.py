@@ -9,7 +9,7 @@ Created on Tue Oct 23 20:21:02 2018
 from __future__ import division
 import sys
 print(sys.path)
-sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquant')  # 新加入的
+sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquantNew')  # 新加入的
 print(sys.path)
 import os
 from jqdatasdk import *
@@ -23,8 +23,7 @@ auth(JOINQUANT_USER, JOINQUANT_PW)
 from hmmlearn.hmm import GaussianHMM
 import warnings
 warnings.filterwarnings("ignore")
-
-from tqsdk import TqApi, TqSim, TqAccount
+# from tqsdk import TqApi, TqSim, TqAccount
 import pandas as pd
 import numpy as np
 import time
@@ -199,7 +198,10 @@ def get_hmm_pos_df_all(index_code_lst, param_dict, index_hq_dic, future_period,
                     continue
             model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
                 train_set, factor_lst, max_states)
-            hidden_states_predict = model.predict(test_set[factor_lst])
+            hidden_states_predict = []
+            for n in range(len(test_set)):
+                hidden_states_predict.append(model.predict(test_set[factor_lst].head(n + 1))[-1])
+            # hidden_states_predict = model.predict(test_set[factor_lst])
             pos_temp = test_set[['trade_date']].reset_index(drop=True)
             pos_temp['pos%s' % m] = hidden_states_predict
             pos_temp['pos%s' % m] = pos_temp['pos%s' % m].apply(lambda x: trans_state_to_bs(x, long_states, short_states, random_states))
@@ -232,7 +234,10 @@ def get_hmm_pos_df_all_open(index_code_lst, param_dict, index_hq_dic, future_per
                     continue
             model, hidden_states, long_states, short_states, random_states = get_longshort_state_from_cumsum(
                 train_set, factor_lst, max_states)
-            hidden_states_predict = model.predict(test_set[factor_lst])
+            hidden_states_predict = []
+            for n in range(len(test_set)):
+                hidden_states_predict.append(model.predict(test_set[factor_lst].head(n+1))[-1])
+            # hidden_states_predict = model.predict(test_set[factor_lst])
             pos_temp = test_set[['trade_date']].reset_index(drop=True)
             pos_temp['pos%s' % m] = hidden_states_predict
             pos_temp['pos%s' % m] = pos_temp['pos%s' % m].apply(
@@ -289,7 +294,9 @@ def get_signal(signal, aum, balance, EndDate, close_dict):
 
 
 if __name__ == '__main__':
-
+    # api = TqApi(TqAccount("simnow", "176793", "yo193846"), web_gui=False)
+    # api = TqApi()
+    # Trd = Trading(api)
     aum = 10000000
     balance = 6
     strategy_id = 'hmm'
@@ -344,8 +351,6 @@ if __name__ == '__main__':
         res = ret.sort_values(by='trade_date', ascending=False)
         res.index = range(len(res))
         res_n = res.copy()
-
-        # res_n.columns = ['weight']
         print(res_n)
         res_n.to_csv(fold_path + 'index' + '_' + EndDate + '.csv', encoding='gbk')
         send_email(res_n, date+'HMM_stockindex', receiver)

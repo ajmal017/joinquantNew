@@ -64,6 +64,13 @@ def PowerSetsRecursive(items):
     return result
 
 
+def get_index(i, N):
+    if i < N:
+        return 0
+    else:
+        return i - N
+
+
 class DataFactory(object):
     def __init__(self, instrument, factor_lst, future_period, s_date, e_date, data_ori):
         self.instrument = instrument
@@ -476,6 +483,53 @@ class HmmStrategy(object):
         self.ret = ret_df
         self.signal_state_all = signal_state_all
 
+    def get_netdf(self, i):
+        data_set = self.data_set
+        train_days = self.train_days
+        test_days = self.test_days
+        len_train = test_days
+        if i + test_days >= len(self.data_set):
+            all_set = data_set.iloc[i - train_days:]
+            train_set = data_set.iloc[i - train_days:i]
+            test_set = data_set.iloc[i:]
+        else:
+            all_set = data_set.iloc[i - train_days:i + test_days]
+            train_set = data_set.iloc[i - train_days:i]
+            test_set = data_set.iloc[i:i + test_days]
+        model, hidden_states, long_states, short_states, random_states = self.get_longshort_state_from_cumsum(
+            train_set)
+        test_df = test_set[self.cols_features]
+
+        test_df = test_df.assign(hidden_states=lambda df: [model.predict(df.iloc[get_index(j, len_train):j, :])[-1] for j in range(1, len(df) + 1)])
+        # test_df = test_df.assign(
+        #     hidden_states=lambda df: df.apply(lambda x: model.predict(np.array(x.rolling(len_train)))[-1]))
+        hidden_states_predict = test_df['hidden_states'].tolist()
+
+        if self.type == 'stock':
+            ret, signal_state = self.handle_data_stock(test_set, hidden_states_predict, long_states, short_states,
+                                                       random_states)
+        else:
+            ret, signal_state = self.handle_data(test_set, hidden_states_predict, long_states, short_states,
+                                                 random_states)
+        return ret
+
+
+    def _get_ret_outsample_opt(self):
+        self.insample = False
+        ret_df = []
+        signal_state_all = []
+        train_days = self.train_days
+        test_days = self.test_days
+        for i in range(train_days, len(self.data_set), test_days):
+            ret = self.get_netdf(i)
+            ret_df.append(ret)
+            signal_state_all.append(ret)
+        ret_df = pd.concat(ret_df)
+        ret_df['net'] = (1 + ret_df['chg']).cumprod()
+        signal_state_all = pd.concat(signal_state_all)
+        self.ret = ret_df
+        self.signal_state_all = signal_state_all
+
 
     def _get_ret_outsample(self):
         self.insample = False
@@ -485,7 +539,7 @@ class HmmStrategy(object):
         test_days = self.test_days
         for i in range(train_days, len(self.data_set), test_days):
             if i + test_days >= len(self.data_set):
-                all_set = self.data_set.iloc[i - train_days:i + test_days]
+                all_set = self.data_set.iloc[i - train_days:]
                 train_set = self.data_set.iloc[i - train_days:i]
                 test_set = self.data_set.iloc[i:]
             else:
@@ -494,9 +548,16 @@ class HmmStrategy(object):
                 test_set = self.data_set.iloc[i:i + test_days]
             model, hidden_states, long_states, short_states, random_states = self.get_longshort_state_from_cumsum(
                 train_set)
-            #             print(len(hidden_states))
-            hidden_states_predict = model.predict(test_set[self.cols_features])
-            #             print(len(hidden_states_predict))
+            hidden_states_predict = []
+            test_df = all_set[self.cols_features]
+            len_train = len(train_set)
+            len_test = len(test_set)
+            for n in range(len(test_set)):
+                hidden_states_predict.append(model.predict(test_df.head(len_train + n + 1).tail(len_test))[-1])
+            # test_df = all_set[self.cols_features]
+            # len_train_set = len(train_set)
+            # for n in range(len(test_set)):
+            #     hidden_states_predict.append(model.predict(test_df.head(len_train_set + n + 1))[-1])
             if self.type == 'stock':
                 ret, signal_state = self.handle_data_stock(test_set, hidden_states_predict, long_states, short_states,
                                                      random_states)
@@ -518,5 +579,10 @@ class HmmStrategy(object):
 
     def run_outsample(self):
         self._get_ret_outsample()
+        self._analyze()
+        return self.annR, self.sharp, self.max_retrace, self.ret
+
+    def run_outsample_opt(self):
+        self._get_ret_outsample_opt()
         self._analyze()
         return self.annR, self.sharp, self.max_retrace, self.ret

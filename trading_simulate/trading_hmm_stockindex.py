@@ -9,7 +9,8 @@ Created on Tue Oct 23 20:21:02 2018
 from __future__ import division
 import sys
 print(sys.path)
-sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquant')  # 新加入的
+# sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquant')  # 新加入的
+sys.path.append('C:\\Users\\51951\\PycharmProjects\\joinquantNew')  # 新加入的
 print(sys.path)
 import os
 from jqdatasdk import *
@@ -231,13 +232,13 @@ def get_signal(signal, aum, balance, EndDate, close_dict):
 
 
 if __name__ == '__main__':
-    api = TqApi(TqAccount("simnow", "168694", "zg19491001"), web_gui=False)
+    api = TqApi(TqAccount("simnow", "176793", "yo193846"), web_gui=False)
     Trd = Trading(api)
 
     aum = 10000000
-    balance = 6
+    balance = 2
     strategy_id = 'hmm'
-    fold_path = 'c://g//trading_hmm//'
+    fold_path = 'c://g//trading_hmm_stockindex//'
     resualt_path = 'c:/e/hmm/resualt/stockindex/'
     # 收件人为多个收件人
     # receiver = ['zxdokok@sina.com','43521385@qq.com','542362275@qq.com', '3467518502@qq.com', 'xiahutao@163.com']
@@ -292,7 +293,6 @@ if __name__ == '__main__':
         # res_n.columns = ['weight']
         print(res_n)
         res_n.to_csv(fold_path + 'temp//' + strategy_id + '_' + EndDate + '.csv')
-        # send_email(res_n, date, receiver)
 
         trading_info = get_signal(res_n, aum, balance, EndDate, close_dict)
         trading_info.to_csv(fold_path + 'position_hmm_' + EndDate + '.csv')
@@ -360,7 +360,7 @@ if __name__ == '__main__':
                     if position_long > 0:
                         order_sp = Trd.insert_order_sp_limit(code)
             t_now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')[-8:]
-            time.sleep(60)
+            time.sleep(5)
 
 
 

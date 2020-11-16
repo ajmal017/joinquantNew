@@ -1,238 +1,13 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# @Time    : 2020/1/8 16:37
-# @Author  : jwliu
-# @Site    :
-# @Software: PyCharm
-import datetime
+# coding=utf-8
+from trading_future.config_self import *
 import pandas as pd
 import numpy as np
-import time
-
-import json
-import threading
+import re
+import datetime
 import pymongo
-from arctic import Arctic, TICK_STORE, CHUNK_STORE
 from jqdatasdk import *
-import tkinter
-import tkinter.messagebox
-from tqsdk import TqApi, TqSim, TqAccount
-
 from configDB import *
 auth(JOINQUANT_USER, JOINQUANT_PW)
-from email_fuction import send_email
-
-MONGDB_IP = '192.168.2.201'  # 居正公司服务器
-MONGDB_USER = 'zhangfang'
-MONGDB_PW = 'jz148923'
-MONGDB_IP_TICK = '192.168.2.11'  # 居正公司服务器
-MONGDB_USER_TICK = 'juzheng'
-MONGDB_PW_TICK = 'jz2018*'
-
-REDIS_IP = '192.168.1.36'
-REDIS_DB = 0
-
-FUTURE_ORIGINAL_TICK_LIB = 'future_tick_jinshuyuan'
-FUTURE_TICK_LIB = 'future_tick'
-FUTURE_DAILY_LIB = 'test_1d'
-FUTURE_MINUTE_5_LIB = 'test_5m'
-FUTURE_MINUTE_LIB = 'test_1m'
-
-
-class Trading:
-    def __init__(self, api):
-        self.api = api
-
-    def get_time_allowed(self, time_allowed_lst):
-        print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')[-8:]
-        if now > '00:00:00' and now < '03:00:00':
-            now = str(int(now[1]) + 24) + now[2:]
-        allowed = False
-        for (s_time, e_time) in time_allowed_lst:
-            if now > s_time and now < e_time:
-                allowed = True
-                break
-        return allowed
-
-    def get_date(self, calen, today):
-        next_tradeday = get_trade_days(start_date=today + datetime.timedelta(days=1), end_date='2030-01-01')[0]
-        if datetime.datetime.now().hour >= 15:
-            calen.append(next_tradeday)
-        EndDate = calen[-1]
-        StartDate = calen[0]
-        hq_last_date = calen[-2]
-        return calen, next_tradeday, EndDate, StartDate, str(hq_last_date)[:10]
-
-    def insert_order_bk_limit(self, code, volume):
-        quote = self.api.get_quote(code)
-        limit_price = quote['upper_limit']
-        order = None
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if limit_price > 0:
-            order = self.api.insert_order(code, direction='BUY', offset='OPEN', volume=volume, limit_price=limit_price)
-            a = 0
-            while (order.status != "FINISHED") and (a < 20):
-                a += 1
-                self.api.wait_update()
-                print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-    def insert_order_sk_limit(self, code, volume):
-        quote = self.api.get_quote(code)
-        limit_price = quote['lower_limit']
-        order = None
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if limit_price > 0:
-            order = self.api.insert_order(code, direction='SELL', offset='OPEN', volume=volume, limit_price=limit_price)
-            a = 0
-            while (order.status != "FINISHED") and (a < 20):
-                a += 1
-                self.api.wait_update()
-                print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-    def insert_order_bp_limit(self, code, volume=None):
-        position_account = self.api.get_position(code)
-        position_short = position_account.pos_short
-        order = None
-        quote = self.api.get_quote(code)
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if position_short:
-            if volume:
-                position_short = min(position_short, volume)
-            quote = self.api.get_quote(code)
-            limit_price = quote['upper_limit']
-            if limit_price > 0:
-                order = self.api.insert_order(code, direction='BUY', offset='CLOSE', volume=position_short,
-                                         limit_price=limit_price)
-                a = 0
-                while (order.status != "FINISHED") and (a < 20):
-                    a += 1
-                    self.api.wait_update()
-                    print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-    def insert_order_bpk_limit(self, code, volume):
-        position_account = self.api.get_position(code)
-        position_short = position_account.pos_short
-        order = None
-        quote = self.api.get_quote(code)
-        limit_price = quote['upper_limit']
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if limit_price > 0:
-            if position_short:
-                order_bp = self.api.insert_order(code, direction='BUY', offset='CLOSE', volume=position_short, limit_price=limit_price)
-                a = 0
-                while (order_bp.status != "FINISHED") and (a < 20):
-                    a += 1
-                    self.api.wait_update()
-                    print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order_bp.status, order_bp.volume_left))
-            order = self.api.insert_order(code, direction='BUY', offset='OPEN', volume=volume, limit_price=limit_price)
-            a = 0
-            while (order.status != "FINISHED") and (a < 20):
-                a += 1
-                self.api.wait_update()
-                print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-    def insert_order_spk_limit(self, code, volume):
-        position_account = self.api.get_position(code)
-        position_long = position_account.pos_long
-        order = None
-        quote = self.api.get_quote(code)
-        limit_price = quote['lower_limit']
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if limit_price > 0:
-            if position_long:
-                order_sp = self.api.insert_order(code, direction='SELL', offset='CLOSE', volume=position_long, limit_price=limit_price)
-                a = 0
-                while (order_sp.status != "FINISHED") and (a < 20):
-                    a += 1
-                    self.api.wait_update()
-                    print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order_sp.status, order_sp.volume_left))
-            order = self.api.insert_order(code, direction='SELL', offset='OPEN', volume=volume, limit_price=limit_price)
-            a = 0
-            while (order.status != "FINISHED") and (a < 20):
-                a += 1
-                self.api.wait_update()
-                print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-    def insert_order_sp_limit(self, code, volume=None):
-        position_account = self.api.get_position(code)
-        position_long = position_account.pos_long
-        order = None
-        quote = self.api.get_quote(code)
-        time_allowed_lst = quote.trading_time.day
-        time_allowed_lst.extend(quote.trading_time.night)
-        allowed = self.get_time_allowed(time_allowed_lst)
-        if not allowed:
-            print('trading time is not allowed')
-            return order
-        if position_long:
-            if volume:
-                position_long = min(position_long, volume)
-            quote = self.api.get_quote(code)
-            limit_price = quote['lower_limit']
-            if limit_price > 0:
-                order = self.api.insert_order(code, direction='SELL', offset='CLOSE', volume=position_long,
-                                         limit_price=limit_price)
-                a = 0
-                while (order.status != "FINISHED") and (a < 20):
-                    a += 1
-                    self.api.wait_update()
-                    print("code: %s, 委托单状态: %s, 未成交手数: %d 手" % (code, order.status, order.volume_left))
-        return order
-
-
-def get_normal_future_index_code(code_lst):
-    temp = get_all_securities(types=['futures'])
-    temp['index_code'] = temp.index
-    temp = temp[['index_code', 'name']]
-    code_dic = {}
-    code_df = pd.DataFrame(code_lst, columns=['name'])
-    code_df = code_df.merge(temp, on=['name']).set_index(['name'])
-    for idx, _row in code_df.iterrows():
-        code_dic[idx] = _row.index_code
-
-    return code_dic, code_lst
-
-
-def get_alert_info(df, txt):
-    if len(df) > 0:
-        info_txt = txt
-        for idx, row in df.iterrows():
-            info_txt = info_txt + '净盈亏: ' + str(np.around(row.net_profit, 4)) + '; 多头盈亏: ' + \
-                       str(np.around(row.long, 4)) + ' 空头盈亏: ' + \
-                       str(np.around(row.short, 4)) + ';'
-        print(info_txt)
-        tkinter.messagebox.showinfo('提示', info_txt)
 
 
 class Future:
@@ -250,6 +25,18 @@ class Future:
         self.__get_tradedays()
         self.__get_main_contract()
 
+    def get_normal_future_index_code(self):
+        temp = get_all_securities(types=['futures'])
+        temp['index_code'] = temp.index
+        temp['idx'] = temp['index_code'].apply(lambda x: x[-9:-5])
+        temp = temp[temp['idx'] == '8888']
+        temp['symbol'] = temp['index_code'].apply(lambda x: x[:-9])
+        temp = temp[['index_code', 'symbol']].set_index(['symbol'])
+        code_dic = {}
+        for idx, _row in temp.iterrows():
+            code_dic[idx] = _row.index_code
+        return code_dic
+
     def get_VolumeMultiple(self, contract_lst=None):
         """
         获取合约单位
@@ -258,7 +45,25 @@ class Future:
         dict_all = dict()
         contract_lst = [i.upper() for i in contract_lst]
         for contract in contract_lst:
-            dict_all[contract] = {i: self.products_base_msg[contract[0:-4]][i] for i in info_lst}
+            contract_temp = contract
+            if len(contract) > 3:
+                contract_temp = contract[:-4]
+            dict_all[contract] = {i: self.products_base_msg[contract_temp][i] for i in info_lst}
+        return dict_all
+
+    def get_PriceTick(self, contract_lst=None):
+        """
+        获取交易所名称
+        """
+        info_lst = ['PriceTick']
+        dict_all = dict()
+        contract_lst = [i.upper() for i in contract_lst]
+        for contract in contract_lst:
+            contract_temp = contract
+            if len(contract) > 3:
+                contract_temp = contract[:-4]
+            dict_all[contract] = {i: self.products_base_msg[contract_temp][i] for i in info_lst}
+
         return dict_all
 
     def get_ExchangeID(self, contract_lst=None):
@@ -321,6 +126,8 @@ class Future:
                                   for i in info_lst}
         return dict_all
 
+
+
     def get_MaxLimitOrderVolume(self, contract_lst=None):
         """
         获取交易所名称
@@ -345,8 +152,7 @@ class Future:
         contract_lst = [i.upper() for i in contract_lst]
         for contract in contract_lst:
             dict_all[contract] = {i: self.products_symbol_msg[''.join(re.split(r'[^A-Za-z]', contract))][contract][i] for i in info_lst}
-            df = self.products_symbol_msg[''.join(re.split(r'[^A-Za-z]', contract))][contract]
-            a = 0
+            # dict_all[contract]['VolumeMultiple'] = self.products_base_msg[contract[0:-4]][contract]
         return dict_all
 
     def __get_product_mongomsg(self):
@@ -354,6 +160,7 @@ class Future:
         获取mongo里的product数据
         :return:
         """
+        print(MONGDB_USER,MONGDB_PW,MONGDB_IP)
         with pymongo.MongoClient(f'mongodb://{MONGDB_USER}:{MONGDB_PW}@{MONGDB_IP}:27017/') as m_cl:
             col = m_cl['MARKET']['product']
             df_product = pd.DataFrame(col.find({'ProductID': {'$regex': '^[a-zA-Z]{1,2}$'}}))
@@ -430,21 +237,13 @@ class Future:
         if product:
             product = product if isinstance(product, list) else [product]
         date = pd.to_datetime(date) if date else pd.to_datetime(datetime.date.today())
-        df_list = list()
-        for mark, df in self.main_contract_msg.items():
-            try:
-                df = pd.DataFrame(df.loc[date]).T
-                df.index = [mark]
-                df_list.append(df)
-            except:
-                df = pd.DataFrame(index=[mark], columns=product)
-                df_list.append(df)
 
-        df_daily = pd.concat(df_list)
-        if product:
-            df_daily = df_daily.loc[:, product]
-        df_dict = df_daily.to_dict()
-        return df_dict
+        df = {}
+        for symbol in product:
+            print(symbol)
+            df[symbol] = get_dominant_future(symbol, date)[:-5]
+
+        return df
 
     def __get_trading_sessions(self):
         """
@@ -536,7 +335,7 @@ class Future:
             today = datetime.date.today().strftime('%Y-%m-%d')
             if pd.to_datetime(today).strftime('%Y%m%d') >= expireDate:
                 data_dict[symbol] = 'expired'
-            elif product in ['CF', 'SR', 'TA', 'OI', 'MA', 'FG', 'RM', 'ZC', 'PM', 'WH', 'RS', 'RI', 'JR', 'LR', 'SF',
+            elif product in ['SA', 'CF', 'SR', 'TA', 'OI', 'MA', 'FG', 'RM', 'ZC', 'PM', 'WH', 'RS', 'RI', 'JR', 'LR', 'SF',
                              'SM', 'CY', 'AP']:
                 expireDate = pd.to_datetime(expireDate)
                 lst_lst_month_last_day = (expireDate.replace(day=1) - datetime.timedelta(days=1)
@@ -547,6 +346,7 @@ class Future:
                     product = product + '7'
                 if today <= last_change_day:
                     limit_dict = {
+                        'SA': '单边持仓量<20万:20000手, 单边持仓量≥20万:单边持仓量×10%',
                         'CF': '单边持仓量<15万:15000手，单边持仓量≥15万:单边持仓量×10%',
                         'SR': '单边持仓量<25万:25000手，单边持仓量≥25万:单边持仓量×10%',
                         'TA': '单边持仓量<25万:25000手，单边持仓量≥25万:单边持仓量×10%',
@@ -560,14 +360,14 @@ class Future:
                     }
 
                 elif change_day > today > last_change_day:
-                    limit_dict = {
-                        'CF': 3000, 'SR': 5000, 'TA': 10000, 'OI': 3000, 'MA': 2000, 'FG': 5000,
+                    limit_dict = {'SA': 4000,
+                        'CF': 4000, 'SR': 5000, 'TA': 10000, 'OI': 3000, 'MA': 2000, 'FG': 5000,
                         'RM': 2000, 'ZC': 20000, 'PM': 600, 'WH': 1000, 'RS': 1000, 'RI': 2000, 'JR': 3000,
                         'LR': 3000, 'SF': 2000, 'SM': 10000, 'CY': 500, 'AP': 100, 'AP7': 20
                     }
                 else:
-                    limit_dict = {
-                        'CF': 400, 'SR': 1000, 'TA': 5000, 'OI': 1000, 'MA': 1000, 'FG': 1000,
+                    limit_dict = {'SA': 800,
+                        'CF': 800, 'SR': 1000, 'TA': 5000, 'OI': 1000, 'MA': 1000, 'FG': 1000,
                         'RM': 1000, 'ZC': 4000, 'PM': 200, 'WH': 300, 'RS': 500, 'RI': 400, 'JR': 500,
                         'LR': 500, 'SF': 500, 'SM': 2000, 'CY': 100, 'AP': 10, 'AP7': 6
                     }
@@ -598,7 +398,7 @@ class Future:
                         'CJ': 6
                     }
                 data_dict[symbol] = limit_dict[product]
-            elif product in ['A', 'V', 'PP', 'C', 'B', 'L', 'P', 'J', 'JM', 'I', 'FB', 'BB', 'CS', 'Y', 'M', 'EG', 'JD']:
+            elif product in ['A', 'V', 'PP', 'C', 'B', 'L', 'P', 'J', 'JM', 'I', 'FB', 'BB', 'CS', 'Y', 'M', 'EG']:
                 expireDate = pd.to_datetime(expireDate)
                 lst_lst_month_last_day = (expireDate.replace(day=1) - datetime.timedelta(days=1)
                                           ).replace(day=1) - datetime.timedelta(days=1)
@@ -648,7 +448,7 @@ class Future:
                 change_day = expireDate.replace(day=1).strftime('%Y-%m-%d')
                 if today < lst_lst_change_day:
                     limit_dict = {
-                        'JD': 600
+                        'JD': 1200
                     }
 
                 elif last_change_day > today >= lst_lst_change_day:
@@ -733,17 +533,5 @@ class Future:
                 data_dict[symbol] = limit_dict[product]
         return data_dict
 
-
-if __name__ == '__main__':
-    # DataFactory.config(MONGDB_PW='jz2018*', MONGDB_IP='192.168.2.201', MONGDB_USER='juzheng',
-    #                    DATASOURCE_DEFAULT=global_variable.DATASOURCE_REMOTE
-    #                    , logging_level=global_variable.logging.INFO)
-    # rd = redis.Redis('192.168.1.36')
-    api = TqApi(TqAccount("H华安期货", "100921556", "425408"), web_gui=True)
-    Trd = Trading(api)
-    order = Trd.insert_order_bk_limit('CZCE.TA101', 1)
-    # for i in range(1):
-    #     order = Trd.insert_order_bp_limit('SHFE.cu2008', 1)
-    #     order = Trd.insert_order_sp_limit('SHFE.cu2009', 1)
-    #     time.sleep(5)
-
+# future = Future()
+# print(future.get_main_symbol(product=['A', 'B']))
